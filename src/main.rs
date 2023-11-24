@@ -22,6 +22,8 @@ fn main() -> Result<()> {
             )
         })?;
 
-    output.status.success().then(|| std::process::exit(1));
-    Ok(())
+    // Use child process exit code, fallback to 1
+    let code = output.status.code().unwrap_or(1);
+
+    std::process::exit(code);
 }
