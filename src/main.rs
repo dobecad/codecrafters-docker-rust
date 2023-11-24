@@ -27,6 +27,10 @@ fn main() -> Result<()> {
     // Change root directory of current process to our chroot directory we just created
     let _ = fs::chroot(CHROOT_DIR).context("failed to chroot")?;
 
+    unsafe {
+        libc::unshare(libc::CLONE_NEWPID);
+    };
+
     // Uncomment this block to pass the first stage!
     let args: Vec<_> = std::env::args().collect();
     let command = &args[3];
