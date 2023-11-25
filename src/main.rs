@@ -23,13 +23,6 @@ async fn main() -> Result<()> {
     let command = &args[3];
     let command_args = &args[4..];
 
-    // Download and unpack target image into the newly created chroot directory
-    let (image_name, image_tag) = parse_image(image)?;
-    let token = auth(&client, image).await?;
-    let manifest = fetch_manifest(&client, &image_name, &image_tag, &token).await?;
-    let image_manifest = fetch_image_manifest(&client, &image_name, &token, &manifest).await?;
-    let _ = download_image_from_manifest(&client, &image_name, &token, &image_manifest).await?;
-
     // Create the chroot directory and the necessary child directories
     let _ = std::fs::create_dir_all(CHROOT_DIR).context("failed to create chroot directory")?;
     let _ = std::fs::create_dir_all(format!("{}/usr/local/bin", CHROOT_DIR))
@@ -43,6 +36,16 @@ async fn main() -> Result<()> {
         format!("{}/usr/local/bin/docker-explorer", CHROOT_DIR),
     )
     .context("failed to copy docker-explorer")?;
+
+    // Download and unpack target image into the newly created chroot directory
+    let (image_name, image_tag) = parse_image(image)?;
+    let token = auth(&client, image).await?;
+
+    // Don't need this step when not running locally
+    // let manifest = fetch_manifest(&client, &image_name, &image_tag, &token).await?;
+
+    let image_manifest = fetch_image_manifest(&client, &image_name, &image_tag, &token).await?;
+    let _ = download_image_from_manifest(&client, &image_name, &token, &image_manifest).await?;
 
     // Change root directory of current process to our chroot directory we just created
     let _ = fs::chroot(CHROOT_DIR).context("failed to chroot")?;
@@ -232,43 +235,33 @@ async fn fetch_manifest(
 /// `https://registry.hub.docker.com/v2/library/ubuntu/manifests/sha256:c9cf959fd83770dfdefd8fb42cfef0761432af36a764c077aed54bbc5bb25368`
 ///
 /// This will produce our [`ImageManifest`], which contains the information about our layers that we want
+///
+/// *Note* Apparently, I only needed to follow this flow when running locally, but not during the codecrafters tests
 async fn fetch_image_manifest(
     client: &reqwest::Client,
     image_name: &str,
+    image_tag: &str,
     token: &str,
-    manifest: &ManifestResponse,
 ) -> Result<ImageManifest> {
-    let target_images: Vec<(String, String)> = manifest
-        .manifests
-        .iter()
-        .filter(|m| m.platform.architecture == "amd64" && m.platform.os == "linux")
-        .map(|m| {
-            let digest = m.digest.clone();
-            let media_type = m.media_type.clone();
-            (digest, media_type)
-        })
-        .collect();
+    let request =
+        format!("https://registry.hub.docker.com/v2/library/{image_name}/manifests/{image_tag}",);
 
-    for (digest, media_type) in target_images.iter() {
-        let request =
-            format!("https://registry.hub.docker.com/v2/library/{image_name}/manifests/{digest}",);
+    let response: ImageManifest = client
+        .get(request)
+        .bearer_auth(token)
+        .header(
+            "Accept",
+            "application/vnd.docker.distribution.manifest.v2+json",
+        )
+        .send()
+        .await
+        .context("failed to fetch manifest")?
+        .json()
+        .await
+        .context("failed to deserialize manifest")?;
 
-        let response: ImageManifest = client
-            .get(request)
-            .bearer_auth(token)
-            .header("Accept", media_type)
-            .send()
-            .await
-            .context("failed to fetch manifest")?
-            .json()
-            .await
-            .context("failed to deserialize manifest")?;
-
-        // We only care about first digest
-        return Ok(response);
-    }
-
-    return Err(anyhow!("Failed to get platform image digest"));
+    // We only care about first digest
+    return Ok(response);
 }
 
 /// Now that we have our image manifest for our platform, we can download and unpack the image
