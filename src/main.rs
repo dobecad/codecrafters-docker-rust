@@ -23,6 +23,13 @@ async fn main() -> Result<()> {
     let command = &args[3];
     let command_args = &args[4..];
 
+    // Download and unpack target image into the newly created chroot directory
+    let (image_name, image_tag) = parse_image(image)?;
+    let token = auth(&client, image).await?;
+    let manifest = fetch_manifest(&client, &image_name, &image_tag, &token).await?;
+    let image_manifest = fetch_image_manifest(&client, &image_name, &token, &manifest).await?;
+    let _ = download_image_from_manifest(&client, &image_name, &token, &image_manifest).await?;
+
     // Create the chroot directory and the necessary child directories
     let _ = std::fs::create_dir_all(CHROOT_DIR).context("failed to create chroot directory")?;
     let _ = std::fs::create_dir_all(format!("{}/usr/local/bin", CHROOT_DIR))
@@ -36,13 +43,6 @@ async fn main() -> Result<()> {
         format!("{}/usr/local/bin/docker-explorer", CHROOT_DIR),
     )
     .context("failed to copy docker-explorer")?;
-
-    // Download and unpack target image into the newly created chroot directory
-    let (image_name, image_tag) = parse_image(image)?;
-    let token = auth(&client, image).await?;
-    let manifest = fetch_manifest(&client, &image_name, &image_tag, &token).await?;
-    let image_manifest = fetch_image_manifest(&client, &image_name, &token, &manifest).await?;
-    let _ = download_image_from_manifest(&client, &image_name, &token, &image_manifest).await?;
 
     // Change root directory of current process to our chroot directory we just created
     let _ = fs::chroot(CHROOT_DIR).context("failed to chroot")?;
