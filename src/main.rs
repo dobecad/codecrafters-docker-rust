@@ -75,15 +75,15 @@ async fn main() -> Result<()> {
 /// I am assuming we should always get something name:tag
 fn parse_image(image: &str) -> Result<(String, String)> {
     let parsed_image_str: Vec<&str> = image.split(':').collect();
-    if parsed_image_str.len() != 2 {
-        return Err(anyhow!(
-            "image name must be in the following format: 'name:tag'"
-        ));
+    if parsed_image_str.len() == 1 {
+        return Ok((parsed_image_str[0].to_string(), "latest".to_string()));
+    }
+    if parsed_image_str.len() == 2 {
+        let (name, tag) = (parsed_image_str[0], parsed_image_str[1]);
+        return Ok((name.to_string(), tag.to_string()));
     }
 
-    let (name, tag) = (parsed_image_str[0], parsed_image_str[1]);
-
-    Ok((name.to_string(), tag.to_string()))
+    Err(anyhow!("Unexpected image name"))
 }
 
 #[derive(Debug, Deserialize)]
