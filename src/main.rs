@@ -190,6 +190,21 @@ async fn fetch_manifest(
     let request =
         format!("https://registry.hub.docker.com/v2/library/{image_name}/manifests/{image_tag}",);
 
+    let response = client
+        .get(&request)
+        .bearer_auth(token)
+        .header(
+            "Accept",
+            "application/vnd.docker.distribution.manifest.v2+json",
+        )
+        .send()
+        .await
+        .context("failed to fetch manifest")?
+        .text()
+        .await;
+
+    println!("Response: {:?}", response);
+
     let response: ManifestResponse = client
         .get(request)
         .bearer_auth(token)
